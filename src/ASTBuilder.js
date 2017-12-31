@@ -63,8 +63,6 @@ const transformAST = {
   PragmaDirective(ctx) {
     const name = ctx.pragmaName().getText();
     let type = null;
-    let start_version = null;
-    let end_version = null;
     let feature = null;
 
     const values = this.visit(ctx.pragmaValue());
@@ -73,35 +71,62 @@ const transformAST = {
         {
           type: 'PragmaStatement',
         },
-        values
+        values.version
       );
     } else if (name === 'experimental') {
       return Object.assign({
         type: 'ExperimentalPragmaStatement',
-        feature,
+        feature: values.expression,
       });
     }
   },
 
   PragmaValue(ctx) {
-    return this.visit(ctx.version());
+    let expression = null;
+    if (ctx.expression()) {
+      expression = this.visit(ctx.expression());
+    }
+
+    let version = null;
+    if (ctx.version()) {
+      version = this.visit(ctx.version());
+    }
+    return { expression, version };
   },
 
   Version(ctx) {
-    const constraint = this.visit(ctx.versionConstraint(0));
+    const versions = ctx
+      .versionConstraint()
+      .map(versionConstraintCtx => this.visit(versionConstraintCtx));
 
-    return {
-      start_version: {
+    let start_version = null;
+    let end_version = null;
+
+    if (versions.length === 1) {
+      start_version = {
         type: 'VersionLiteral',
-        operator: constraint.operator,
-        version: constraint.version,
-      },
-      end_version: {
+        operator: versions[0].operator,
+        version: versions[0].version,
+        start: versions[0].start,
+        end: versions[0].end,
+      };
+    } else if (versions.length === 2) {
+      start_version = {
         type: 'VersionLiteral',
-        operator: constraint.operator,
-        version: constraint.version,
-      },
-    };
+        operator: versions[0].operator,
+        version: versions[0].version,
+        start: versions[0].start,
+        end: versions[0].end,
+      };
+      end_version = {
+        type: 'VersionLiteral',
+        operator: versions[1].operator,
+        version: versions[1].version,
+        start: versions[1].start,
+        end: versions[1].end,
+      };
+    }
+    return { start_version, end_version };
   },
 
   VersionConstraint(ctx) {
@@ -743,28 +768,34 @@ const transformAST = {
 
   ImportDirective(ctx) {
     const pathString = ctx.StringLiteral().getText();
-    let unitAlias = null;
-    let symbolAliases = null;
+    let alias = null;
+    let symbols = [];
 
     if (ctx.importDeclaration().length > 0) {
-      symbolAliases = ctx.importDeclaration().map(decl => {
+      symbols = ctx.importDeclaration().map(decl => {
         const symbol = decl.identifier(0).getText();
         let alias = null;
         if (decl.identifier(1)) {
           alias = decl.identifier(1).getText();
         }
-        return [symbol, alias];
+        return {
+          type: 'Symbol',
+          name: symbol,
+          alias,
+          start: decl.start.start,
+          end: decl.stop.stop,
+        };
       });
     } else if (ctx.children.length === 7) {
-      unitAlias = ctx.getChild(3).getText();
+      alias = ctx.getChild(3).getText();
     } else if (ctx.children.length === 5) {
-      unitAlias = ctx.getChild(3).getText();
+      alias = ctx.getChild(3).getText();
     }
 
     return {
-      path: pathString.substring(1, pathString.length - 1),
-      unitAlias,
-      symbolAliases,
+      from: pathString.substring(1, pathString.length - 1),
+      alias,
+      symbols,
     };
   },
 
