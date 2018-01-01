@@ -64,15 +64,18 @@ const transformAST = {
     const name = ctx.pragmaName().getText();
     let type = null;
     let feature = null;
+    let start_version = null;
+    let end_version = null;
 
     const values = this.visit(ctx.pragmaValue());
     if (name === 'solidity') {
-      return Object.assign(
-        {
-          type: 'PragmaStatement',
-        },
-        values.version
-      );
+      return {
+        type: 'PragmaStatement',
+        start_version: values.version && values.version.start_version,
+        end_version: values.version && values.version.end_version,
+        start: values.version && values.version.start,
+        end: values.version && values.version.end,
+      };
     } else if (name === 'experimental') {
       return Object.assign({
         type: 'ExperimentalPragmaStatement',
@@ -148,11 +151,19 @@ const transformAST = {
     const name = ctx.identifier().getText();
     this._currentContract = name;
 
+    let type = null;
+    if (ctx.getChild(0).getText() === 'contract') {
+      type = 'ContractStatement';
+    } else if (ctx.getChild(0).getText() === 'interface') {
+      type = 'InterfaceStatement';
+    } else if (ctx.getChild(0).getText() === 'library') {
+      type = 'LibraryStatement';
+    }
     return {
+      type,
       name,
-      baseContracts: this.visit(ctx.inheritanceSpecifier()),
-      subNodes: this.visit(ctx.contractPart()),
-      kind: ctx.getChild(0).getText(),
+      is: this.visit(ctx.inheritanceSpecifier()),
+      body: this.visit(ctx.contractPart()),
     };
   },
 
