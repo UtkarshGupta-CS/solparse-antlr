@@ -183,7 +183,7 @@ const transformAST = {
     if (ctx.identifier(0)) {
       name = ctx.identifier(0).getText();
     }
-    const parameters = this.visit(ctx.parameterList());
+    const params = this.visit(ctx.parameterList());
 
     let block = null;
     if (ctx.block()) {
@@ -216,8 +216,9 @@ const transformAST = {
     }
 
     return {
+      type: 'FunctionDeclaration',
       name,
-      parameters,
+      params,
       body: block,
       visibility,
       modifiers,
@@ -310,8 +311,9 @@ const transformAST = {
 
   StructDefinition(ctx) {
     return {
+      type: 'StructDeclaration',
       name: ctx.identifier().getText(),
-      members: this.visit(ctx.structVariableDeclaration()),
+      body: this.visit(ctx.structVariableDeclaration()),
     };
   },
 
@@ -324,10 +326,21 @@ const transformAST = {
     if (ctx.storageLocation()) {
       storageLocation = ctx.storageLocation().getText();
     }
-
+    const typeName = this.visit(ctx.typeName());
+    const iden = ctx.identifier();
+    const literal = this.createNode(
+      {
+        type: 'Type',
+        literal: typeName.name,
+        members: [],
+        array_parts: [],
+      },
+      iden
+    );
     return {
-      typeName: this.visit(ctx.typeName()),
+      type: 'DeclarativeExpression',
       name: ctx.identifier().getText(),
+      literal,
       storageLocation,
       isStateVar: false,
       isIndexed: false,
@@ -642,7 +655,7 @@ const transformAST = {
       expression = this.visit(ctx.expression());
     }
 
-    let visibility = 'default';
+    let visibility = null;
     if (ctx.Internal(0)) {
       visibility = 'internal';
     } else if (ctx.Public(0)) {
@@ -651,28 +664,25 @@ const transformAST = {
       visibility = 'private';
     }
 
-    let isDeclaredConst = false;
+    let is_constant = false;
     if (ctx.Constant(0)) {
-      isDeclaredConst = true;
+      is_constant = true;
     }
 
-    const decl = this.createNode(
+    const literal = this.createNode(
       {
-        type: 'VariableDeclaration',
-        typeName: type,
-        name,
-        expression,
-        visibility,
-        isStateVar: true,
-        isDeclaredConst,
-        isIndexed: false,
+        type: 'Type',
+        literal: type.name || type.namePath,
       },
       iden
     );
 
     return {
-      variables: [decl],
-      initialValue: expression,
+      literal,
+      name,
+      visibility,
+      is_constant,
+      value: expression,
     };
   },
 
@@ -804,6 +814,7 @@ const transformAST = {
     }
 
     return {
+      type: 'ImportStatement',
       from: pathString.substring(1, pathString.length - 1),
       alias,
       symbols,
